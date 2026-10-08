@@ -1,0 +1,120 @@
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+  background: #fff;
+  color: #111;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 5vw;
+}
+.logo { font-weight: 700; font-size: 18px; }
+.topbar nav { display: flex; gap: 16px; align-items: center; }
+.info-link { color: #111; text-decoration: none; font-size: 14px; }
+.btn {
+  background: #111; color: #fff; border: 0;
+  border-radius: 6px; padding: 10px 14px; cursor: pointer;
+}
+
+main { padding: 0 5vw 40px; max-width: 1100px; }
+
+.viewport {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  /* Fondo degradado inspirado en el mockup mientras no hay cámara */
+  background: radial-gradient(circle at 50% 70%, #f7bdb6 45%, #8e2a8f 75%, #0d5a3a 100%);
+}
+.viewport video, .viewport canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+/* Video y esqueleto se reflejan (efecto espejo) para que el usuario se vea natural.
+   El plano (#graph) NO se refleja: sus números deben leerse al derecho. */
+.viewport video, #overlay { transform: scaleX(-1); }
+/* El plano recibe el mouse; el esqueleto y el mensaje lo dejan pasar */
+#graph { cursor: grab; touch-action: none; }
+#graph:active { cursor: grabbing; }
+#overlay, .viewport-msg { pointer-events: none; }
+/* Mensaje de estado como etiqueta inferior, para no tapar los ejes */
+.viewport-msg {
+  position: absolute; left: 50%; top: 16px;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6); color: #fff;
+  font-size: 14px; font-weight: 600;
+  padding: 8px 14px; border-radius: 999px;
+  white-space: nowrap;
+}
+.viewport-msg:empty { display: none; }
+
+.panel { margin-top: 24px; }
+.panel h2 { font-size: 24px; margin-bottom: 8px; }
+.muted { color: #666; font-size: 14px; }
+
+@media (max-width: 600px) {
+  .info-link { display: none; }
+  .panel h2 { font-size: 18px; }
+}
+
+/* ---------- Panel de resultados ---------- */
+.mode-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.mode-buttons button {
+  border: 1px solid #ddd; background: #fff; color: #111;
+  border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;
+}
+.mode-buttons button.active { background: #111; color: #fff; border-color: #111; }
+.mode-buttons button.secondary { margin-left: auto; }
+
+.results { display: grid; gap: 6px; max-width: 720px; margin-bottom: 16px; }
+.results h3 { font-size: 18px; }
+.results .row {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 6px 0; border-bottom: 1px solid #eee; font-size: 15px;
+}
+.results .row strong { font-variant-numeric: tabular-nums; text-align: right; }
+.results .note { color: #444; font-size: 14px; line-height: 1.5; }
+.results .success { color: #12804a; font-weight: 600; }
+.progress { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+.progress div { height: 100%; background: #8e2a8f; transition: width 0.1s; }
+
+.warning {
+  background: #fff1f0; color: #b42318; border: 1px solid #ffccc7;
+  padding: 8px 12px; border-radius: 6px; font-size: 14px; margin-bottom: 12px;
+}
+
+.help { margin: 16px 0; font-size: 14px; line-height: 1.6; max-width: 720px; }
+.help summary { cursor: pointer; font-weight: 600; }
+.help ol { padding-left: 20px; margin: 8px 0; }
+.help table { border-collapse: collapse; margin-top: 8px; }
+.help th, .help td { border: 1px solid #ddd; padding: 4px 10px; text-align: left; }
+.quote { margin-top: 8px; }
+
+/* ---------- Entrada de la función ---------- */
+.fn-form { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; max-width: 720px; }
+.fn-form label { font-weight: 700; white-space: nowrap; }
+.fn-form input {
+  flex: 1; min-width: 0;
+  font: 16px ui-monospace, Consolas, monospace;
+  padding: 9px 12px; border: 1px solid #ccc; border-radius: 6px;
+}
+.fn-form input:focus { outline: 2px solid #8e2a8f; border-color: transparent; }
+.fn-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.fn-examples button {
+  font: 13px ui-monospace, Consolas, monospace;
+  background: #f4f0f6; color: #5b1b5c; border: 0; border-radius: 999px;
+  padding: 4px 10px; cursor: pointer;
+}
+.fn-examples button:hover { background: #ead9ec; }
+.help code { background: #f4f0f6; padding: 0 4px; border-radius: 3px; }
+
+/* Punto de color que identifica cada mano en el panel */
+.hand-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle;
+}

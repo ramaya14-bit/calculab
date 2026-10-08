@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CalcuLab</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- Barra superior: logo, información y control de cámara (según el mockup) -->
+    <header class="topbar">
+      <div class="logo">✺ CalcuLab</div>
+      <nav>
+        <a href="#ayuda" id="info-link" class="info-link">Información Relevante</a>
+        <button id="btn-camera" class="btn">Ver Cámara</button>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Viewport principal, en capas (de abajo hacia arriba):
+           video de la cámara → plano cartesiano → esqueleto de las manos -->
+      <section class="viewport">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="graph"></canvas>
+        <canvas id="overlay"></canvas>
+        <p id="viewport-msg" class="viewport-msg">Activa la cámara para comenzar</p>
+      </section>
+
+      <!-- Panel inferior: indicador de modo, controles y resultados -->
+      <section class="panel">
+        <h2 id="mode-indicator">Modo 0 · Explorar</h2>
+
+        <!-- Función a explorar: el usuario escribe cualquier f(x) -->
+        <form id="fn-form" class="fn-form" autocomplete="off">
+          <label for="fn-input">f(x) =</label>
+          <input id="fn-input" type="text" spellcheck="false" placeholder="por ejemplo x^3 - 3x" />
+          <button type="submit" class="btn">Graficar</button>
+        </form>
+        <p id="fn-error" class="warning" hidden></p>
+        <div id="fn-examples" class="fn-examples"></div>
+
+        <!-- Control alternativo: botones para elegir el modo sin cámara -->
+        <div class="mode-buttons">
+          <button data-mode="1">☝ 1</button>
+          <button data-mode="2">✌ 2</button>
+          <button data-mode="3">3</button>
+          <button data-mode="4">4</button>
+          <button data-mode="5">🖐 5</button>
+          <button id="btn-new-challenge" hidden>Nuevo reto</button>
+          <button id="btn-reset" class="secondary">Reiniciar</button>
+        </div>
+
+        <p id="derivative-warning" class="warning" hidden></p>
+        <div id="results" class="results"></div>
+
+        <p id="fingers-debug" class="muted"></p>
+        <p id="control-status" class="muted"></p>
+
+        <details id="ayuda" class="help">
+          <summary>Cómo usar CalcuLab</summary>
+          <ol>
+            <li>Pulsa <b>Ver Cámara</b> y acepta el permiso. Muestra la palma de las manos a la cámara.</li>
+            <li><b>Mano derecha</b> <span class="hand-dot" style="background:#ff4fd8"></span>(rosa): muestra de 1 a 5 dedos para elegir la interacción. La punta del índice mueve el punto <i>x = a</i>.</li>
+            <li><b>Mano izquierda</b> <span class="hand-dot" style="background:#2ee6c8"></span>(turquesa): ✊ puño y mueve para desplazar · ☝ índice y abre/cierra la pinza con el pulgar para hacer zoom · ✋ abierta para soltar.</li>
+            <li><b>Función</b>: escribe cualquier función de x y pulsa Graficar. Usa <code>^</code> para potencias, <code>sqrt()</code>, <code>sin()</code>, <code>cos()</code>, <code>tan()</code>, <code>ln()</code>, <code>e^x</code>, <code>abs()</code>. Ejemplo: <code>x^2*sin(x)</code>.</li>
+            <li><b>Sin cámara</b>: botones o teclas 1–5 para el modo, clic o flechas ← → para mover <i>a</i>, arrastrar para desplazar, rueda para zoom, <b>R</b> para reiniciar, <b>N</b> para un nuevo reto.</li>
+          </ol>
+          <table>
+            <tr><th>Gesto</th><th>Acción</th></tr>
+            <tr><td>1 dedo</td><td>Evaluar f(a) y observar la pendiente</td></tr>
+            <tr><td>2 dedos</td><td>Construir la recta tangente en x = a</td></tr>
+            <tr><td>3 dedos</td><td>Mostrar f(x), f'(x) y f''(x)</td></tr>
+            <tr><td>4 dedos</td><td>Puntos críticos, máximos y mínimos</td></tr>
+            <tr><td>5 dedos</td><td>Reto aplicado (razón de cambio)</td></tr>
+          </table>
+        </details>
+
+        <p class="muted quote">A hombros de gigantes. — Isaac Newton</p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

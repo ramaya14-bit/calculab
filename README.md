@@ -1,4 +1,6 @@
-# CalcuLab
+# CalcuLab: Laboratorio interactivo de Cálculo Diferencial
+
+Versión 1.0 · 2026
 
 Laboratorio interactivo de cálculo diferencial. Proyecto de aula del curso de Cálculo Diferencial — Fundación Universitaria del Área Andina.
 
@@ -9,12 +11,12 @@ La aplicación reconoce las manos con la cámara y permite explorar cualquier fu
 | Mano derecha | Acción |
 | --- | --- |
 | 1 dedo | Evaluar f(a) y observar la pendiente |
-| 2 dedos | Construir la recta tangente en x = a |
+| 2 dedos | Recta secante entre P(a, f(a)) y Q(a + h, f(a + h)) y su paso a la tangente |
 | 3 dedos | Mostrar f(x), f'(x) y f''(x) |
 | 4 dedos | Puntos críticos, máximos y mínimos |
 | 5 dedos | Reto aplicado (razón de cambio) |
 
-La mano izquierda mueve la vista (puño) y hace zoom (pinza pulgar–índice). Sin cámara funciona con botones, teclado y mouse.
+La mano izquierda mueve la vista (puño) y hace zoom (pinza pulgar–índice). Sin cámara funciona con botones, teclado y mouse. También permite escribir la función a mano, igualarla a 0 y detecta indeterminaciones (0/0, k/0, 0⁰…) con su resolución paso a paso.
 
 ## Tecnologías
 

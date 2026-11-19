@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CalcuLab</title>
+    <title>CalcuLab: Laboratorio interactivo de Cálculo Diferencial</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <!-- Barra superior: logo, información y control de cámara (según el mockup) -->
     <header class="topbar">
-      <div class="logo">✺ CalcuLab</div>
+      <div class="logo">✺ CalcuLab: Laboratorio interactivo de Cálculo Diferencial <span class="version">v1.0</span></div>
       <nav>
         <a href="#ayuda" id="info-link" class="info-link">Información Relevante</a>
         <button id="btn-camera" class="btn">Ver Cámara</button>
@@ -49,6 +49,8 @@
           <button data-mode="3">3</button>
           <button data-mode="4">4</button>
           <button data-mode="5">🖐 5</button>
+          <button id="btn-h-minus" hidden title="Acercar Q a P (tecla ↓)">h −</button>
+          <button id="btn-h-plus" hidden title="Alejar Q de P (tecla ↑)">h +</button>
           <button id="btn-new-challenge" hidden>Nuevo reto</button>
           <button id="btn-reset" class="secondary">Reiniciar</button>
         </div>
@@ -66,12 +68,12 @@
             <li><b>Mano derecha</b> <span class="hand-dot" style="background:#ff4fd8"></span>(rosa): muestra de 1 a 5 dedos para elegir la interacción. La punta del índice mueve el punto <i>x = a</i>.</li>
             <li><b>Mano izquierda</b> <span class="hand-dot" style="background:#2ee6c8"></span>(turquesa): ✊ puño y mueve para desplazar · ☝ índice y abre/cierra la pinza con el pulgar para hacer zoom · ✋ abierta para soltar.</li>
             <li><b>Función, ecuación e indeterminaciones</b>: escribe cualquier función de x o ecuación igualada a 0 (ej. <code>x^2 - 4 = 0</code>), usa el botón <b>= 0</b> o dibújala con <b>✍ A mano</b>. Usa <code>^</code> para potencias, <code>sqrt()</code>, <code>sin()</code>, <code>cos()</code>, <code>tan()</code>, <code>ln()</code>, <code>e^x</code>, <code>abs()</code>, <code>lim x-&gt;2 ...</code>. Las indeterminaciones (<code>x/0</code>, <code>0/0</code>, <code>0^0</code>, huecos y asíntotas) se detectan automáticamente.</li>
-            <li><b>Sin cámara</b>: botones o teclas 1–5 para el modo, clic o flechas ← → para mover <i>a</i>, arrastrar para desplazar, rueda para zoom, <b>R</b> para reiniciar, <b>N</b> para un nuevo reto.</li>
+            <li><b>Sin cámara</b>: botones o teclas 1–5 para el modo, clic o flechas ← → para mover <i>a</i>, flechas ↑ ↓ o botones h−/h+ para la separación de la secante, arrastrar para desplazar, rueda para zoom, <b>R</b> para reiniciar, <b>N</b> para un nuevo reto.</li>
           </ol>
           <table>
             <tr><th>Gesto</th><th>Acción</th></tr>
             <tr><td>1 dedo</td><td>Evaluar f(a) y observar la pendiente</td></tr>
-            <tr><td>2 dedos</td><td>Construir la recta tangente en x = a</td></tr>
+            <tr><td>2 dedos</td><td>Recta secante entre P(a, f(a)) y Q(a + h, f(a + h)); separar o juntar índice y medio cambia h</td></tr>
             <tr><td>3 dedos</td><td>Mostrar f(x), f'(x) y f''(x)</td></tr>
             <tr><td>4 dedos</td><td>Puntos críticos, máximos y mínimos</td></tr>
             <tr><td>5 dedos</td><td>Reto aplicado (razón de cambio)</td></tr>

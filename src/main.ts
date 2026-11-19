@@ -35,6 +35,9 @@ const graphCtx = graph.getContext('2d')!;
 const btnCamera = $<HTMLButtonElement>('btn-camera');
 const btnReset = $<HTMLButtonElement>('btn-reset');
 const btnNewChallenge = $<HTMLButtonElement>('btn-new-challenge');
+const btnHMinus = $<HTMLButtonElement>('btn-h-minus');
+const btnHPlus = $<HTMLButtonElement>('btn-h-plus');
+const clampH = (v: number) => Math.min(H_MAX, Math.max(H_MIN, v));
 const msg = $('viewport-msg');
 const modeIndicator = $('mode-indicator');
 const results = $('results');
@@ -63,6 +66,10 @@ let tracker: HandLandmarker | null = null;
 let mode = 0;           // interacción activa (0 = explorar)
 let lastHandMode = 0;   // último modo confirmado por la mano
 let a = 1.5;            // punto x = a sobre la gráfica
+const H_DEFAULT = 1;
+const H_MIN = 0.01;
+const H_MAX = 6;
+let h = H_DEFAULT;      // separación de la secante (modo 2)
 let lastResults = '';
 
 // ---------- Cambiar la función ----------
@@ -188,7 +195,7 @@ function updateDrawPreview(expr: string) {
     drawPreview.hidden = false;
     drawPreview.classList.toggle('indeterminate', Boolean(parsed.globalIndetermination));
     if (parsed.globalIndetermination) {
-      drawPreview.textContent = `⚠ ${parsed.globalIndetermination.title} (${parsed.globalIndetermination.form})`;
+      drawPreview.textContent = `⚠ ${parsed.globalIndetermination.title}`;
     } else if (parsed.isEquation) {
       drawPreview.textContent = `Ecuación: ${parsed.equationText}`;
     } else {
@@ -340,11 +347,14 @@ function setMode(m: number) {
   modeIndicator.textContent = `Modo ${m} · ${MODE_NAMES[m]}`;
   modeButtons.forEach((b) => b.classList.toggle('active', Number(b.dataset.mode) === m));
   btnNewChallenge.hidden = m !== 5;
+  btnHMinus.hidden = m !== 2;
+  btnHPlus.hidden = m !== 2;
 }
 
 function resetAll() {
   view.reset();
   a = nearestDefined(fn.f, 1.5);
+  h = H_DEFAULT;
   lastHandMode = 0;
   setMode(0);
 }
@@ -451,6 +461,13 @@ function loop() {
         const target = view.toWorldX((1 - roles.mode[8].x) * view.width);
         a += (target - a) * 0.35;
       }
+      // Modo 2: la separación entre las puntas del índice (8) y del medio (12)
+      // fija h; al juntar los dedos, Q se acerca a P y la secante tiende a la tangente
+      if (mode === 2) {
+        const spreadPx = Math.abs(roles.mode[12].x - roles.mode[8].x) * view.width;
+        const target = clampH((spreadPx * 3) / view.scale);
+        h += (target - h) * 0.3;
+      }
       setHandStatus(fingersDebug, 'derecha', `Mano derecha: ${raw} ${raw === 1 ? 'dedo' : 'dedos'} → modo ${mode}`);
     } else if (!roles.mode) {
       setHandStatus(fingersDebug, 'derecha', 'Mano derecha: no detectada (elige el modo)');
@@ -465,7 +482,7 @@ function loop() {
   }
 
   drawGrid(graphCtx, view);
-  const html = renderMode(mode, { ctx: graphCtx, view, fn, a, particles, challenge });
+  const html = renderMode(mode, { ctx: graphCtx, view, fn, a, h, particles, challenge });
   // Solo se toca el DOM si los resultados cambiaron
   if (html !== lastResults) {
     results.innerHTML = html;
@@ -482,6 +499,8 @@ requestAnimationFrame(loop);
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(Number(b.dataset.mode))));
 btnReset.addEventListener('click', resetAll);
 btnNewChallenge.addEventListener('click', () => challenge.newChallenge(fn, view));
+btnHMinus.addEventListener('click', () => { h = clampH(h / 1.5); });
+btnHPlus.addEventListener('click', () => { h = clampH(h * 1.5); });
 $('info-link').addEventListener('click', () => { help.open = true; });
 
 // ---------- Control alternativo: teclado ----------
@@ -498,6 +517,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key >= '0' && e.key <= '5') setMode(Number(e.key));
   else if (e.key === 'ArrowLeft') a -= 10 / view.scale;
   else if (e.key === 'ArrowRight') a += 10 / view.scale;
+  else if (e.key === 'ArrowDown' && mode === 2) h = clampH(h / 1.5);
+  else if (e.key === 'ArrowUp' && mode === 2) h = clampH(h * 1.5);
   else if (e.key === 'r' || e.key === 'R') resetAll();
   else if ((e.key === 'n' || e.key === 'N') && mode === 5) challenge.newChallenge(fn, view);
   else return;

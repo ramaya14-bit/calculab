@@ -26,7 +26,7 @@ import type { View } from './view';
 export const MODE_NAMES = [
   'Explorar',
   'Evaluar f(a) y pendiente',
-  'Recta tangente',
+  'Recta secante (y tangente)',
   "f(x), f'(x) y f''(x)",
   'Puntos críticos, máximos y mínimos',
   'Reto aplicado',
@@ -61,6 +61,7 @@ export interface ModeContext {
   view: View;
   fn: MathFunction;
   a: number;
+  h: number;      // separación entre los dos puntos de la secante (modo 2)
   particles: CurveParticles;
   challenge: ChallengeRunner;
 }
@@ -71,7 +72,7 @@ export function renderMode(mode: number, m: ModeContext): string {
 
   switch (mode) {
     case 1: return evaluate(m);
-    case 2: return tangent(m);
+    case 2: return secant(m);
     case 3: return derivatives(m);
     case 4: return critical(m);
     case 5: return challenge(m);
@@ -249,7 +250,7 @@ function outOfDomain(fn: MathFunction, a: number, indets: PointIndetermination[]
       row('f(a)', `No definida: ${formLabel(diag.form)}`, P.danger) +
       (diag.limit !== undefined && diag.limit !== null ? row(`Límite cuando x → ${fmt(a)}`, fmt(diag.limit), P.d2f) : '') +
       note(diag.detail) +
-      (fn.limitTarget == null && indets.some((p) => p.x === a) ? limitStepsHtml(fn, a) : '')
+      (indets.some((p) => p.x === a) ? limitStepsHtml(fn, a) : '')
     );
   }
   return (
@@ -323,8 +324,11 @@ function evaluate({ ctx, view, fn, a }: ModeContext): string {
     note(slopeMeaning(m));
 }
 
-// ---------- Modo 2: recta tangente en x = a ----------
-function tangent({ ctx, view, fn, a }: ModeContext): string {
+// ---------- Modo 2: recta secante entre P(a, f(a)) y Q(a + h, f(a + h)) ----------
+// La secante une dos puntos de la curva; su pendiente es la razón de cambio
+// promedio Δy/Δx. Al acercar Q a P (h → 0) la secante tiende a la tangente,
+// que se dibuja punteada como referencia: f'(a) = lím h→0 [f(a+h) − f(a)] / h.
+function secant({ ctx, view, fn, a, h }: ModeContext): string {
   plotFunction(ctx, view, fn.f, C.f);
   const { indets, roots, excluded } = drawMathOverlays(ctx, view, fn);
 
@@ -335,31 +339,63 @@ function tangent({ ctx, view, fn, a }: ModeContext): string {
   }
 
   const fa = fn.f(a);
-  const m = fn.df(a);
-  const b = fa - m * a; // ordenada al origen: y = m·x + b
-  const line = (x: number) => fa + m * (x - a);
-
   if (!Number.isFinite(fa)) return outOfDomain(fn, a, indets, snapTol) + equationRows(fn, roots, excluded);
-  if (!Number.isFinite(m)) {
-    drawDot(ctx, view, a, fa, C.point, 7);
-    return row('Función', fn.fText) + row('Punto', `(${fmt(a)}, ${fmt(fa)})`) +
-      note("f'(a) no existe aquí, así que no hay una recta tangente con pendiente definida.");
-  }
+
+  const b = a + h;
+  const fb = fn.f(b);
+  const sign = (v: number) => (v < 0 ? `− ${fmt(-v)}` : `+ ${fmt(v)}`);
   const x0 = view.toWorldX(0);
   const x1 = view.toWorldX(view.width);
-  drawSegment(ctx, view, x0, line(x0), x1, line(x1), C.tangent, 2.5);
-  drawDot(ctx, view, a, fa, C.point, 7);
 
-  const sign = (v: number) => (v < 0 ? `− ${fmt(-v)}` : `+ ${fmt(v)}`);
+  // Si Q cae fuera del dominio o sobre una discontinuidad, no hay secante válida
+  const gapBetween = indets.some((p) => (p.x - a) * (p.x - b) <= 0);
+  if (!Number.isFinite(fb) || gapBetween) {
+    drawDot(ctx, view, a, fa, C.point, 7);
+    return row('Función', fn.fText) +
+      row('P = (a, f(a))', `(${fmt(a)}, ${fmt(fa)})`) +
+      row('Q = (a + h, f(a + h))', `x = ${fmt(b)}: f no está definida o hay una discontinuidad entre P y Q`, P.danger) +
+      note('Reduce la separación h (dedos índice y medio más juntos, teclas ↓/↑ o botones h−/h+) para construir la secante.');
+  }
+
+  const dy = fb - fa;
+  const mSec = dy / h;
+  const mTan = fn.df(a);
+  const secLine = (x: number) => fa + mSec * (x - a);
+  const bSec = fa - mSec * a;
+
+  // Tangente punteada de referencia
+  if (Number.isFinite(mTan)) {
+    drawSegment(ctx, view, x0, fa + mTan * (x0 - a), x1, fa + mTan * (x1 - a), C.tangent, 1.5, [6, 6]);
+  }
+  // Recta secante
+  drawSegment(ctx, view, x0, secLine(x0), x1, secLine(x1), C.d2f, 2.5);
+  // Triángulo Δx (horizontal) y Δy (vertical)
+  drawSegment(ctx, view, a, fa, b, fa, C.df, 2);
+  drawSegment(ctx, view, b, fa, b, fb, C.df, 2);
+  drawLabel(ctx, `Δx = h = ${fmt(h)}`, view.toScreenX((a + b) / 2), view.toScreenY(fa) + (dy >= 0 ? 16 : -16), C.df, 'center');
+  drawLabel(ctx, `Δy = ${fmt(dy)}`, view.toScreenX(b) + 8, view.toScreenY((fa + fb) / 2), C.df);
+
+  drawDot(ctx, view, a, fa, C.point, 7);
+  drawDot(ctx, view, b, fb, C.d2f, 7);
+  drawLabel(ctx, `P(${fmt(a)}, ${fmt(fa)})`, view.toScreenX(a) - 10, view.toScreenY(fa) - 18, '#fff', 'right');
+  drawLabel(ctx, `Q(${fmt(b)}, ${fmt(fb)})`, view.toScreenX(b) + 10, view.toScreenY(fb) - 18, '#fff');
+
+  const diff = Number.isFinite(mTan) ? Math.abs(mSec - mTan) : NaN;
   return row('Función', fn.fText) +
     equationRows(fn, roots, excluded) +
-    row('Punto de tangencia', `(${fmt(a)}, ${fmt(fa)})`) +
-    row("Pendiente m = f'(a)", fmt(m), P.df) +
-    row('Fórmula', 'y = f(a) + f\'(a)(x − a)') +
-    row('Sustituyendo', `y = ${fmt(fa)} ${sign(m)}(x ${sign(-a)})`) +
-    row('Recta tangente', `y = ${fmt(m)}x ${sign(b)}`, P.tangent) +
+    row('P = (a, f(a))', `(${fmt(a)}, ${fmt(fa)})`) +
+    row('Q = (a + h, f(a + h))', `(${fmt(b)}, ${fmt(fb)})`) +
+    row('Separación h = Δx', fmt(h)) +
+    row('Pendiente secante', `m = [f(a+h) − f(a)] / h = ${fmt(dy)} / ${fmt(h)} = ${fmt(mSec)}`, P.d2f) +
+    row('Recta secante', `y = ${fmt(mSec)}x ${sign(bSec)}`, P.d2f) +
+    (Number.isFinite(mTan)
+      ? row("Pendiente tangente f'(a)", fmt(mTan), P.tangent) +
+        row("|m_sec − f'(a)|", fmt(diff))
+      : row("f'(a)", 'no existe en este punto', P.danger)) +
     indeterminationRows(indets) +
-    note('La tangente toca la curva en el punto y tiene su misma pendiente: es la mejor aproximación lineal de f cerca de x = a.');
+    note(`La pendiente de la secante es la <b>razón de cambio promedio</b> de f entre x = ${fmt(a)} y x = ${fmt(b)}. ` +
+      'Al juntar los dedos (o pulsar ↓) h se reduce, Q se acerca a P y la secante gira hasta coincidir con la <b>tangente</b> punteada: ' +
+      "f'(a) = lím h→0 [f(a+h) − f(a)] / h.");
 }
 
 // ---------- Modo 3: f, f' y f'' juntas ----------

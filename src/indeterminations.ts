@@ -4,8 +4,9 @@
 // - Indeterminaciones puntuales en funciones de x: huecos (0/0), saltos,
 //   asíntotas verticales (k/0) y bordes de dominio, con cálculo de límites laterales.
 
-import type { MathJsInstance, MathNode } from 'mathjs';
+import { derivative, rationalize, type MathJsInstance, type MathNode } from 'mathjs';
 import { findRoots, fmt, type MathFunction } from './math';
+import { pretty } from './parser';
 
 export type IndeterminationForm =
   | '0/0'
@@ -189,7 +190,7 @@ export function detectGlobalIndetermination(
             found = {
               form: 'k/0',
               title: 'Indeterminado (división entre cero: k/0)',
-              detail: 'No es posible dividir entre cero. El denominador vale 0 para todo x, por lo que la expresión es indeterminada en ℝ.',
+              detail: 'No es posible dividir entre cero: el denominador vale 0, así que la expresión no tiene valor en ℝ. (A diferencia de 0/0, un número k ≠ 0 entre 0 no es una forma indeterminada sino una operación no definida: cerca de ese punto la función tiende a ±∞.)',
             };
           }
           return;
@@ -466,6 +467,24 @@ export function estimateOneSidedLimit(f: (x: number) => number, x0: number, dir:
   return { kind: 'none' };
 }
 
+// Nombre correcto de cada forma: 0/0, ∞/∞, 0^0… son INDETERMINACIONES (el valor
+// depende del límite); k/0 con k ≠ 0 no es indeterminación sino división entre
+// cero (la función no está definida y aparece una asíntota).
+export function formLabel(form: IndeterminationForm): string {
+  switch (form) {
+    case 'k/0': return 'división entre cero (k/0)';
+    case 'ln(0)': return 'logaritmo de 0';
+    case 'ln(u ≤ 0)': return 'logaritmo no positivo';
+    case '√(u < 0)': return 'raíz de negativo';
+    case 'dominio': return 'fuera del dominio';
+    default: return `indeterminación ${form}`;
+  }
+}
+
+function capitalize(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export function fmtLimitSide(side: LimitSide): string {
   if (side.kind === 'finite') return fmt(side.value);
   if (side.kind === 'inf') return side.sign > 0 ? '+∞' : '−∞';
@@ -488,10 +507,10 @@ function classifySingularity(
     if (Math.abs(left.value - right.value) < 1e-2 * (1 + Math.abs(left.value))) {
       limit = (left.value + right.value) / 2;
       kind = 'removable';
-      summary = `indeterminación ${form} (discontinuidad evitable / hueco) · lím = ${fmt(limit)}`;
+      summary = `${formLabel(form)} (discontinuidad evitable / hueco) · lím = ${fmt(limit)}`;
     } else {
       kind = 'jump';
-      summary = `indeterminación ${form} (salto) · lím⁻ = ${fmt(left.value)}, lím⁺ = ${fmt(right.value)}`;
+      summary = `${formLabel(form)} (salto) · lím⁻ = ${fmt(left.value)}, lím⁺ = ${fmt(right.value)}`;
     }
   } else if (left.kind === 'inf' || right.kind === 'inf') {
     kind = 'asymptote';
@@ -501,18 +520,18 @@ function classifySingularity(
         : right.kind === 'none'
           ? `lím⁻ = ${fmtLimitSide(left)}`
           : `lím⁻ = ${fmtLimitSide(left)}, lím⁺ = ${fmtLimitSide(right)}`;
-    summary = `indeterminación ${form} (asíntota vertical) · ${desc}`;
+    summary = `${formLabel(form)} (asíntota vertical) · ${desc}`;
   } else if (left.kind === 'finite' && right.kind === 'none') {
     limit = left.value;
     kind = 'boundary';
-    summary = `indeterminación ${form} (borde de dominio) · lím⁻ = ${fmt(limit)}`;
+    summary = `${formLabel(form)} (borde de dominio) · lím⁻ = ${fmt(limit)}`;
   } else if (right.kind === 'finite' && left.kind === 'none') {
     limit = right.value;
     kind = 'boundary';
-    summary = `indeterminación ${form} (borde de dominio) · lím⁺ = ${fmt(limit)}`;
+    summary = `${formLabel(form)} (borde de dominio) · lím⁺ = ${fmt(limit)}`;
   } else {
     kind = 'oscillating';
-    summary = `indeterminación ${form} · el límite no existe`;
+    summary = `${formLabel(form)} · el límite no existe`;
   }
 
   return { x: x0, form, kind, left, right, limit, summary };
@@ -639,7 +658,7 @@ export function diagnoseAtPoint(
             : `No está definida en x = ${fmt(near.x)} (${near.summary}).`;
     return {
       form: near.form,
-      title: `Indeterminación ${near.form} en x = ${fmt(near.x)}`,
+      title: `${capitalize(formLabel(near.form))} en x = ${fmt(near.x)}`,
       detail: extra,
       limit: near.limit,
     };
@@ -655,7 +674,7 @@ export function diagnoseAtPoint(
         const info = classifySingularity(fn.f, a, form);
         return {
           form,
-          title: `Indeterminación ${form} en x = ${fmt(a)}`,
+          title: `${capitalize(formLabel(form))} en x = ${fmt(a)}`,
           detail: info.summary,
           limit: info.limit,
         };
@@ -751,4 +770,167 @@ export function evaluateLimit(fn: MathFunction, target: number | 'inf' | '-inf')
     rightText: fmtLimitSide(right),
     resultText,
   };
+}
+
+// ---------- Paso a paso del límite (como en una clase) ----------
+
+export interface LimitStep {
+  title: string;
+  text: string;   // explicación
+  math?: string;  // cuenta o fórmula
+  final?: boolean;
+}
+
+// Texto legible de un polinomio con coeficientes ascendentes [c0, c1, c2…]
+function polyText(c: number[]): string {
+  const parts: string[] = [];
+  for (let i = c.length - 1; i >= 0; i--) {
+    const v = Math.round(c[i] * 1e9) / 1e9;
+    if (v === 0) continue;
+    const abs = Math.abs(v);
+    const coef = abs === 1 && i > 0 ? '' : fmt(abs);
+    const pow = i === 0 ? '' : i === 1 ? 'x' : `x${String(i).replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)])}`;
+    parts.push(`${v < 0 ? '−' : '+'} ${coef}${pow}`);
+  }
+  if (!parts.length) return '0';
+  const t = parts.join(' ');
+  return t.startsWith('+ ') ? t.slice(2) : '−' + t.slice(2);
+}
+
+function polyEval(c: number[], x: number): number {
+  return c.reduceRight((acc, v) => acc * x + v, 0);
+}
+
+// Divide el polinomio entre (x − p) por Ruffini; devuelve el cociente
+function ruffini(c: number[], p: number): number[] {
+  const desc = [...c].reverse();
+  const q: number[] = [desc[0]];
+  for (let i = 1; i < desc.length - 1; i++) q.push(desc[i] + q[i - 1] * p);
+  return q.reverse();
+}
+
+function polyCoefficients(node: MathNode): number[] | null {
+  try {
+    const r = rationalize(node, {}, true) as unknown as { coefficients: number[]; variables: string[]; denominator: unknown };
+    if (r.denominator || !r.coefficients?.length) return null;
+    return r.coefficients;
+  } catch {
+    return null;
+  }
+}
+
+const wrapP = (t: string) => (/[+−\s]/.test(t) ? `(${t})` : t);
+const xMinus = (p: number) => (p === 0 ? 'x' : p > 0 ? `(x − ${fmt(p)})` : `(x + ${fmt(-p)})`);
+
+/**
+ * Construye la resolución paso a paso de lím x→p f(x): sustitución directa,
+ * identificación de la forma, resolución (factorizar y cancelar o L'Hôpital),
+ * tabla de aproximación por ambos lados y conclusión.
+ */
+export function buildLimitSteps(fn: MathFunction, p: number): LimitStep[] {
+  const steps: LimitStep[] = [];
+  const P = fmt(p);
+  steps.push({ title: 'Planteamiento', text: `Queremos saber a qué valor se acerca f(x) cuando x tiende a ${P}.`, math: `lím x→${P} ${fn.fText.replace(/^f\(x\) = /, '')}` });
+
+  const direct = fn.f(p);
+  const root = fn.node ? unwrap(fn.node) : null;
+  const isQuotient = root?.type === 'OperatorNode' && (root as unknown as { fn: string }).fn === 'divide';
+  const [numNode, denNode] = isQuotient ? (root as unknown as { args: MathNode[] }).args : [null, null];
+  const num = numNode ? safeCompile(numNode) : null;
+  const den = denNode ? safeCompile(denNode) : null;
+
+  if (Number.isFinite(direct)) {
+    steps.push({ title: 'Sustitución directa', text: `Sustituimos x = ${P}: la función está definida, así que el límite es ese valor (si f es continua ahí).`, math: `f(${P}) = ${fmt(direct)}` });
+  } else if (num && den && Math.abs(den(p)) < 1e-9) {
+    const nv = num(p);
+    const zeroOverZero = Number.isFinite(nv) && Math.abs(nv) < 1e-9;
+    steps.push({
+      title: 'Sustitución directa',
+      text: zeroOverZero
+        ? `Al sustituir x = ${P} el numerador y el denominador valen 0: obtenemos 0/0, una forma indeterminada. No significa que el límite no exista; hay que transformar la expresión.`
+        : `Al sustituir x = ${P} el denominador vale 0 pero el numerador vale ${fmt(nv)}: es k/0 (división entre cero). No es una indeterminación: la función crece sin límite (asíntota vertical). Hay que mirar el signo por cada lado.`,
+      math: `numerador → ${fmt(nv)}, denominador → 0  ⇒  ${zeroOverZero ? '0/0' : `${fmt(nv)}/0`}`,
+    });
+
+    if (zeroOverZero) {
+      const cn = polyCoefficients(numNode!);
+      const cd = polyCoefficients(denNode!);
+      if (cn && cd) {
+        // Factorizar: ambos polinomios tienen la raíz x = p, se cancela (x − p)
+        let a = cn, b = cd, k = 0;
+        while (a.length > 1 && b.length > 1 && Math.abs(polyEval(a, p)) < 1e-9 && Math.abs(polyEval(b, p)) < 1e-9 && k < 6) {
+          a = ruffini(a, p); b = ruffini(b, p); k++;
+        }
+        const factor = k > 1 ? `${xMinus(p)}^${k}` : xMinus(p);
+        const nb = polyEval(b, p);
+        const reduced = b.length === 1 && b[0] === 1 ? polyText(a) : `${wrapP(polyText(a))} / ${wrapP(polyText(b))}`;
+        steps.push({
+          title: 'Factorizar y simplificar',
+          text: `Como x = ${P} anula numerador y denominador, ambos tienen el factor ${factor} (división sintética / Ruffini). Lo cancelamos, ya que x ≠ ${P} al calcular el límite.`,
+          math: `[${factor}·${wrapP(polyText(a))}] / [${factor}·${wrapP(polyText(b))}]  =  ${reduced}`,
+        });
+        if (Math.abs(nb) > 1e-9) {
+          steps.push({ title: 'Sustituir de nuevo', text: 'Ahora la expresión simplificada sí se puede evaluar.', math: `${reduced} en x = ${P}  →  ${fmt(polyEval(a, p) / nb)}` });
+        }
+      } else {
+        // Regla de L'Hôpital: lím f/g = lím f'/g' (se repite mientras siga 0/0)
+        try {
+          let n = numNode!, d = denNode!;
+          const lines: string[] = [];
+          let value: number | null = null;
+          for (let i = 0; i < 3 && value === null; i++) {
+            n = derivative(n, 'x');
+            d = derivative(d, 'x');
+            const vn = safeCompile(n)(p);
+            const vd = safeCompile(d)(p);
+            if (!Number.isFinite(vn) || !Number.isFinite(vd)) break;
+            if (Math.abs(vd) > 1e-9) {
+              value = vn / vd;
+              lines.push(`(${pretty(n)}) / (${pretty(d)})  en x = ${P}  →  ${fmt(vn)} / ${fmt(vd)} = ${fmt(value)}`);
+            } else if (Math.abs(vn) < 1e-9) {
+              lines.push(`(${pretty(n)}) / (${pretty(d)})  en x = ${P}  →  0/0 otra vez, derivamos de nuevo`);
+            } else break;
+          }
+          // Solo se muestra si L'Hôpital realmente resuelve el límite
+          if (value !== null) {
+            steps.push({
+              title: "Regla de L'Hôpital",
+              text: "Con la forma 0/0 podemos derivar numerador y denominador por separado: lím f(x)/g(x) = lím f'(x)/g'(x).",
+              math: lines.join('\n'),
+            });
+          }
+        } catch {
+          // si no se puede derivar, la tabla de aproximación decide
+        }
+      }
+    }
+  } else {
+    const diag = diagnoseAtPoint(fn, p, findPointIndeterminations(fn, p - 1, p + 1), 1e-4);
+    steps.push({ title: 'Sustitución directa', text: `Al sustituir x = ${P} la expresión no está definida (${diag ? formLabel(diag.form) : 'fuera del dominio'}): hay que mirar más de cerca.`, math: `f(${P}) no está definida` });
+  }
+
+  // Tabla de aproximación por izquierda y derecha
+  const hs = [0.1, 0.01, 0.001];
+  const cell = (x: number) => `f(${fmt(x)}) = ${Number.isFinite(fn.f(x)) ? fmt(fn.f(x)) : '—'}`;
+  steps.push({
+    title: 'Tabla de aproximación',
+    text: `Nos acercamos a ${P} por la izquierda y por la derecha.`,
+    math: `por la izquierda: ${hs.map((h) => cell(p - h)).join(', ')}\npor la derecha: ${[...hs].reverse().map((h) => cell(p + h)).join(', ')}`,
+  });
+
+  const rep = evaluateLimit(fn, p);
+  const exists = !rep.resultText.startsWith('no existe');
+  steps.push({
+    title: 'Conclusión',
+    text: exists
+      ? rep.resultText.includes('∞')
+        ? 'Ambos lados crecen sin límite en la misma dirección: el límite es infinito (asíntota vertical).'
+        : Number.isFinite(direct)
+          ? 'Ambos lados se acercan al mismo valor.'
+          : `Ambos lados se acercan al mismo valor. f(${P}) no existe (círculo hueco en la gráfica), pero el límite sí.`
+      : `Los límites laterales no coinciden (lím⁻ = ${rep.leftText}, lím⁺ = ${rep.rightText}): el límite no existe.`,
+    math: `lím x→${P} f(x) = ${rep.resultText}`,
+    final: true,
+  });
+  return steps;
 }

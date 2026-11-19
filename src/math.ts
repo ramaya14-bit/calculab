@@ -2,6 +2,7 @@
 // críticos, discontinuidades e intervalos de crecimiento de CUALQUIER función.
 // La función en sí la construye parser.ts a partir del texto del usuario.
 
+import type { MathNode } from 'mathjs';
 import type { GlobalIndetermination, SingularityGenerator } from './indeterminations';
 
 export interface MathFunction {
@@ -18,6 +19,7 @@ export interface MathFunction {
   equationKind?: 'normal' | 'identity' | 'contradiction';
   globalIndetermination: GlobalIndetermination | null;
   singularityGenerators: SingularityGenerator[];
+  node: MathNode | null;       // árbol de la expresión (para el paso a paso de límites)
   limitTarget?: number | 'inf' | '-inf' | null;
 }
 

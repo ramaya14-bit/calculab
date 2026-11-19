@@ -152,6 +152,7 @@ function buildIndeterminateFunction(
     equationText,
     globalIndetermination: indet,
     singularityGenerators: [],
+    node: null,
     limitTarget: limitTarget ?? null,
   };
 }
@@ -314,6 +315,7 @@ export function parseFunction(input: string): MathFunction {
       equationKind,
       globalIndetermination: null,
       singularityGenerators,
+      node,
       limitTarget,
     };
   } catch {
@@ -332,6 +334,7 @@ export function parseFunction(input: string): MathFunction {
       equationKind,
       globalIndetermination: null,
       singularityGenerators,
+      node,
       limitTarget,
     };
   }

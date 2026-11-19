@@ -3,6 +3,8 @@
 
 import { criticalPoints, findRoots, fmt, monotonyIntervals, type MathFunction } from './math';
 import {
+  buildLimitSteps,
+  formLabel,
   diagnoseAtPoint,
   evaluateLimit,
   findPointIndeterminations,
@@ -196,16 +198,31 @@ function indeterminationRows(indets: PointIndetermination[]): string {
     .join('');
 }
 
+// Paso a paso del límite en x = p. Se guarda en caché porque el panel se
+// redibuja en cada cuadro y el cálculo simbólico es costoso.
+const stepsCache = new WeakMap<MathFunction, { p: number; html: string }>();
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function limitStepsHtml(fn: MathFunction, p: number): string {
+  const hit = stepsCache.get(fn);
+  if (hit && hit.p === p) return hit.html;
+  const items = buildLimitSteps(fn, p)
+    .map((st) => `<li${st.final ? ' class="final"' : ''}><b>${st.title}.</b> ${st.text}${st.math ? `<code>${esc(st.math)}</code>` : ''}</li>`)
+    .join('');
+  const html = `<h3>Paso a paso</h3><ol class="steps">${items}</ol>`;
+  stepsCache.set(fn, { p, html });
+  return html;
+}
+
 // Filas de resumen cuando el usuario escribió un límite explícito (lim x->p ...)
 function limitRows(fn: MathFunction): string {
   if (fn.limitTarget === null || fn.limitTarget === undefined) return '';
   const rep = evaluateLimit(fn, fn.limitTarget);
   return (
     row(`Límite (x → ${rep.targetText})`, rep.resultText, P.d2f) +
-    row('Sustitución directa', rep.directText, rep.indetermination ? P.danger : '') +
-    (rep.leftText && rep.rightText
-      ? row('Límites laterales', `lím⁻ = ${rep.leftText} · lím⁺ = ${rep.rightText}`)
-      : '')
+    (typeof fn.limitTarget === 'number'
+      ? limitStepsHtml(fn, fn.limitTarget)
+      : row('Método', rep.directText))
   );
 }
 
@@ -216,7 +233,7 @@ function renderGlobalIndetermination({ ctx, view, fn }: ModeContext): string {
   drawCenterBadge(ctx, view, `⚠ ${ind.title}`, label);
   return (
     row(fn.isEquation ? 'Ecuación' : 'Expresión', label) +
-    row('Resultado', `Indeterminado (${ind.form})`, P.danger) +
+    row('Resultado', ind.form === 'k/0' ? 'Indeterminado: división entre cero (k/0)' : `Indeterminado (${ind.form})`, P.danger) +
     row('Tipo', ind.title, P.danger) +
     note(ind.detail)
   );
@@ -229,9 +246,10 @@ function outOfDomain(fn: MathFunction, a: number, indets: PointIndetermination[]
     return (
       row('Función', fn.fText) +
       row('a', fmt(a)) +
-      row('f(a)', `Indeterminado (${diag.form})`, P.danger) +
+      row('f(a)', `No definida: ${formLabel(diag.form)}`, P.danger) +
       (diag.limit !== undefined && diag.limit !== null ? row(`Límite cuando x → ${fmt(a)}`, fmt(diag.limit), P.d2f) : '') +
-      note(diag.detail)
+      note(diag.detail) +
+      (fn.limitTarget == null && indets.some((p) => p.x === a) ? limitStepsHtml(fn, a) : '')
     );
   }
   return (

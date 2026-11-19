@@ -2,6 +2,8 @@
 // críticos, discontinuidades e intervalos de crecimiento de CUALQUIER función.
 // La función en sí la construye parser.ts a partir del texto del usuario.
 
+import type { GlobalIndetermination, SingularityGenerator } from './indeterminations';
+
 export interface MathFunction {
   f: (x: number) => number;
   df: (x: number) => number;   // primera derivada f'(x)
@@ -10,6 +12,13 @@ export interface MathFunction {
   dfText: string;
   d2fText: string;
   symbolic: boolean;           // true si las derivadas se obtuvieron simbólicamente
+  rawExpression: string;       // texto original ingresado por el usuario
+  isEquation: boolean;         // true si el usuario escribió una ecuación (ej. x^2 - 4 = 0)
+  equationText?: string;       // texto legible de la ecuación (ej. x² − 4 = 0)
+  equationKind?: 'normal' | 'identity' | 'contradiction';
+  globalIndetermination: GlobalIndetermination | null;
+  singularityGenerators: SingularityGenerator[];
+  limitTarget?: number | 'inf' | '-inf' | null;
 }
 
 // Derivada numérica por diferencia central:

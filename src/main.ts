@@ -10,7 +10,18 @@ import { HandControl, type ControlGesture } from './handControl';
 import { View } from './view';
 import { drawGrid } from './graph';
 import { checkDerivatives, nearestDefined, type MathFunction } from './math';
-import { DEFAULT_EXPRESSION, EXAMPLES, parseFunction } from './parser';
+import { DEFAULT_EXPRESSION, EXAMPLES, parseFunction, quickInspectInput } from './parser';
+import {
+  clearUserTemplates,
+  HandwritingPad,
+  loadGeminiKey,
+  loadUserTemplates,
+  recognizeLocal,
+  recognizeWithGemini,
+  saveGeminiKey,
+  teachSymbol,
+  TRAINABLE_SYMBOLS,
+} from './handwriting';
 import { MODE_NAMES, renderMode } from './modes';
 import { CurveParticles } from './particles';
 import { ChallengeRunner } from './challenge';
@@ -57,8 +68,24 @@ let lastResults = '';
 // ---------- Cambiar la función ----------
 const fnForm = $<HTMLFormElement>('fn-form');
 const fnInput = $<HTMLInputElement>('fn-input');
+const fnNotice = $('fn-notice');
 const fnError = $('fn-error');
+const btnEqZero = $<HTMLButtonElement>('btn-eq-zero');
+const btnDraw = $<HTMLButtonElement>('btn-draw');
 const derivativeWarning = $('derivative-warning');
+
+function updateLiveNotice(text: string) {
+  const info = quickInspectInput(text);
+  if (!info) {
+    fnNotice.hidden = true;
+    fnNotice.textContent = '';
+    fnNotice.classList.remove('indeterminate');
+    return;
+  }
+  fnNotice.hidden = false;
+  fnNotice.textContent = info.message;
+  fnNotice.classList.toggle('indeterminate', info.kind === 'indeterminate');
+}
 
 function applyFunction(expression: string) {
   try {
@@ -71,21 +98,229 @@ function applyFunction(expression: string) {
   }
   fnError.hidden = true;
   fnInput.value = expression;
+  btnEqZero.classList.toggle('active', fn.isEquation);
+  updateLiveNotice(expression);
+  lastResults = '';
 
   // Verificación: las derivadas simbólicas deben coincidir con las numéricas
-  const errors = checkDerivatives(fn);
-  derivativeWarning.hidden = errors.length === 0;
-  derivativeWarning.textContent = errors.length ? '⚠ Revisa las derivadas: ' + errors.join(' · ') : '';
+  if (fn.globalIndetermination) {
+    derivativeWarning.hidden = true;
+    derivativeWarning.textContent = '';
+  } else {
+    const errors = checkDerivatives(fn);
+    derivativeWarning.hidden = errors.length === 0;
+    derivativeWarning.textContent = errors.length ? '⚠ Revisa las derivadas: ' + errors.join(' · ') : '';
+  }
 
-  // El punto a se coloca donde la función esté definida (p. ej. ln x exige x > 0)
-  a = nearestDefined(fn.f, 1.5);
+  // Si hay un límite en x -> p, ubicamos x = a en p; si no, donde f esté definida
+  if (typeof fn.limitTarget === 'number') {
+    a = fn.limitTarget;
+  } else if (!fn.globalIndetermination) {
+    a = nearestDefined(fn.f, 1.5);
+  }
   if (mode === 5) challenge.newChallenge(fn, view);
 }
+
+fnInput.addEventListener('input', () => {
+  fnError.hidden = true;
+  updateLiveNotice(fnInput.value);
+});
 
 fnForm.addEventListener('submit', (e) => {
   e.preventDefault();
   applyFunction(fnInput.value);
   fnInput.blur(); // devuelve el teclado a los atajos (1–5, flechas…)
+});
+
+// Botón rápido "= 0": iguala la expresión actual a 0 (o quita "= 0" si ya está)
+btnEqZero.addEventListener('click', () => {
+  const raw = fnInput.value.trim();
+  if (!raw) return;
+  const next = /=\s*0\s*$/.test(raw)
+    ? raw.replace(/\s*=\s*0\s*$/, '').trim()
+    : raw.includes('=')
+      ? raw
+      : `${raw} = 0`;
+  applyFunction(next);
+});
+
+// ---------- Modal de escritura a mano ----------
+const drawModal = $('draw-modal');
+const drawClose = $<HTMLButtonElement>('draw-close');
+const drawCanvas = $<HTMLCanvasElement>('draw-canvas');
+const drawUndo = $<HTMLButtonElement>('draw-undo');
+const drawClear = $<HTMLButtonElement>('draw-clear');
+const drawRecognize = $<HTMLButtonElement>('draw-recognize');
+const drawApplyNow = $<HTMLButtonElement>('draw-apply-now');
+const drawRecognized = $<HTMLInputElement>('draw-recognized');
+const drawUse = $<HTMLButtonElement>('draw-use');
+const drawPreview = $('draw-preview');
+const drawError = $('draw-error');
+const teachSymbolSelect = $<HTMLSelectElement>('teach-symbol');
+const teachSave = $<HTMLButtonElement>('teach-save');
+const teachReset = $<HTMLButtonElement>('teach-reset');
+const geminiKeyInput = $<HTMLInputElement>('gemini-key');
+const geminiSave = $<HTMLButtonElement>('gemini-save');
+
+const pad = new HandwritingPad(drawCanvas);
+
+function refreshTeachSelect() {
+  const templates = loadUserTemplates();
+  const prev = teachSymbolSelect.value;
+  teachSymbolSelect.innerHTML = TRAINABLE_SYMBOLS.map(
+    (s) => `<option value="${s}">${s} (${(templates[s] || []).length} ✓)</option>`,
+  ).join('');
+  if (prev) teachSymbolSelect.value = prev;
+}
+refreshTeachSelect();
+geminiKeyInput.value = loadGeminiKey();
+
+function updateDrawPreview(expr: string) {
+  const text = expr.trim();
+  drawError.hidden = true;
+  if (!text) {
+    drawPreview.hidden = true;
+    drawPreview.textContent = '';
+    return;
+  }
+  try {
+    const parsed = parseFunction(text);
+    drawPreview.hidden = false;
+    drawPreview.classList.toggle('indeterminate', Boolean(parsed.globalIndetermination));
+    if (parsed.globalIndetermination) {
+      drawPreview.textContent = `⚠ ${parsed.globalIndetermination.title} (${parsed.globalIndetermination.form})`;
+    } else if (parsed.isEquation) {
+      drawPreview.textContent = `Ecuación: ${parsed.equationText}`;
+    } else {
+      drawPreview.textContent = `Vista previa: ${parsed.fText}`;
+    }
+  } catch (err) {
+    drawPreview.hidden = true;
+    drawError.hidden = false;
+    drawError.textContent = (err as Error).message;
+  }
+}
+
+function openDrawModal() {
+  drawModal.hidden = false;
+  drawError.hidden = true;
+  requestAnimationFrame(() => pad.resize());
+}
+
+function closeDrawModal() {
+  drawModal.hidden = true;
+}
+
+async function runRecognition(applyImmediately: boolean) {
+  drawError.hidden = true;
+  if (!pad.strokes.length) {
+    drawError.hidden = false;
+    drawError.textContent = 'Primero escribe una función o ecuación en el recuadro.';
+    return;
+  }
+
+  const prevLabel = drawApplyNow.textContent;
+  drawRecognize.disabled = true;
+  drawApplyNow.disabled = true;
+  drawApplyNow.textContent = 'Reconociendo…';
+
+  try {
+    let expr = '';
+    const key = loadGeminiKey();
+    if (key) {
+      try {
+        expr = await recognizeWithGemini(pad.toPngDataUrl(), key);
+      } catch {
+        // Si Gemini falla o no hay red, usamos automáticamente el motor local
+        expr = recognizeLocal(pad.strokes);
+      }
+    } else {
+      expr = recognizeLocal(pad.strokes);
+    }
+
+    drawRecognized.value = expr;
+    updateDrawPreview(expr);
+
+    if (applyImmediately) {
+      // Verifica que se pueda interpretar (incluyendo ecuaciones e indeterminaciones)
+      parseFunction(expr);
+      applyFunction(expr);
+      closeDrawModal();
+    }
+  } catch (err) {
+    drawError.hidden = false;
+    drawError.textContent = (err as Error).message;
+  } finally {
+    drawRecognize.disabled = false;
+    drawApplyNow.disabled = false;
+    drawApplyNow.textContent = prevLabel;
+  }
+}
+
+btnDraw.addEventListener('click', openDrawModal);
+drawClose.addEventListener('click', closeDrawModal);
+drawModal.addEventListener('click', (e) => {
+  if (e.target === drawModal) closeDrawModal();
+});
+drawUndo.addEventListener('click', () => pad.undo());
+drawClear.addEventListener('click', () => {
+  pad.clear();
+  drawRecognized.value = '';
+  drawPreview.hidden = true;
+  drawError.hidden = true;
+});
+drawRecognize.addEventListener('click', () => void runRecognition(false));
+drawApplyNow.addEventListener('click', () => void runRecognition(true));
+drawRecognized.addEventListener('input', () => updateDrawPreview(drawRecognized.value));
+drawUse.addEventListener('click', () => {
+  const expr = drawRecognized.value.trim();
+  if (!expr) return;
+  try {
+    parseFunction(expr);
+    applyFunction(expr);
+    closeDrawModal();
+  } catch (err) {
+    drawError.hidden = false;
+    drawError.textContent = (err as Error).message;
+  }
+});
+drawRecognized.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    drawUse.click();
+  }
+});
+
+teachSave.addEventListener('click', () => {
+  if (!pad.strokes.length) {
+    drawError.hidden = false;
+    drawError.textContent = 'Dibuja primero el símbolo que quieres enseñar.';
+    return;
+  }
+  const sym = teachSymbolSelect.value;
+  const templates = teachSymbol(sym, pad.strokes);
+  pad.clear();
+  drawError.hidden = true;
+  refreshTeachSelect();
+  const idx = TRAINABLE_SYMBOLS.indexOf(sym);
+  if ((templates[sym]?.length || 0) >= 2 && idx >= 0 && idx < TRAINABLE_SYMBOLS.length - 1) {
+    teachSymbolSelect.value = TRAINABLE_SYMBOLS[idx + 1];
+  }
+});
+
+teachReset.addEventListener('click', () => {
+  clearUserTemplates();
+  refreshTeachSelect();
+});
+
+geminiSave.addEventListener('click', () => {
+  saveGeminiKey(geminiKeyInput.value);
+  geminiSave.textContent = geminiKeyInput.value.trim() ? 'Guardada ✓' : 'Eliminada';
+  setTimeout(() => { geminiSave.textContent = 'Guardar clave'; }, 1500);
+});
+
+window.addEventListener('resize', () => {
+  if (!drawModal.hidden) pad.resize();
 });
 
 // Botones de ejemplo
@@ -202,7 +437,7 @@ function loop() {
     }
     roles = assignRoles(hands);
 
-    if (roles.mode) {
+    if (roles.mode && drawModal.hidden) {
       // El modo solo cambia cuando el conteo estabilizado cambia; así los
       // botones y el teclado no son sobrescritos en cada cuadro
       const raw = countFingers(roles.mode);
@@ -217,15 +452,15 @@ function loop() {
         a += (target - a) * 0.35;
       }
       setHandStatus(fingersDebug, 'derecha', `Mano derecha: ${raw} ${raw === 1 ? 'dedo' : 'dedos'} → modo ${mode}`);
-    } else {
+    } else if (!roles.mode) {
       setHandStatus(fingersDebug, 'derecha', 'Mano derecha: no detectada (elige el modo)');
     }
 
-    if (roles.control) {
+    if (roles.control && drawModal.hidden) {
       setHandStatus(controlStatus, 'izquierda', CONTROL_TEXT[control.update(roles.control, view)]);
     } else {
       control.release();
-      setHandStatus(controlStatus, 'izquierda', 'Mano izquierda: no detectada (mueve y hace zoom)');
+      if (!roles.control) setHandStatus(controlStatus, 'izquierda', 'Mano izquierda: no detectada (mueve y hace zoom)');
     }
   }
 
@@ -251,8 +486,15 @@ $('info-link').addEventListener('click', () => { help.open = true; });
 
 // ---------- Control alternativo: teclado ----------
 window.addEventListener('keydown', (e) => {
+  if (!drawModal.hidden) {
+    if (e.key === 'Escape') {
+      closeDrawModal();
+      e.preventDefault();
+    }
+    return;
+  }
   // Mientras se escribe la función, las teclas son texto, no atajos
-  if (e.target instanceof HTMLInputElement) return;
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (e.key >= '0' && e.key <= '5') setMode(Number(e.key));
   else if (e.key === 'ArrowLeft') a -= 10 / view.scale;
   else if (e.key === 'ArrowRight') a += 10 / view.scale;

@@ -167,3 +167,80 @@ export function drawLabel(
   ctx.fillText(text, sx, sy);
   ctx.restore();
 }
+
+// Círculo hueco para discontinuidades evitables (huecos 0/0) y saltos
+export function drawHollowDot(
+  ctx: CanvasRenderingContext2D, view: View, x: number, y: number, color = '#5ee0ff', r = 6.5,
+): void {
+  if (!Number.isFinite(y)) return;
+  const sx = view.toScreenX(x);
+  const sy = view.toScreenY(y);
+  if (sx < -20 || sx > view.width + 20 || sy < -20 || sy > view.height + 20) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(17,17,17,0.75)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = SHADOW;
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Línea vertical punteada para asíntotas verticales (división entre cero k/0)
+export function drawAsymptote(
+  ctx: CanvasRenderingContext2D, view: View, x: number, label?: string,
+): void {
+  const sx = view.toScreenX(x);
+  if (sx < -10 || sx > view.width + 10) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,107,107,0.85)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 6]);
+  ctx.shadowColor = SHADOW;
+  ctx.shadowBlur = 3;
+  ctx.beginPath();
+  ctx.moveTo(sx, 0);
+  ctx.lineTo(sx, view.height);
+  ctx.stroke();
+  ctx.restore();
+  if (label) {
+    drawLabel(ctx, label, Math.min(view.width - 10, sx + 6), 24, '#ffd1d1', 'left');
+  }
+}
+
+// Tarjeta centrada sobre el plano para avisar de una indeterminación global (p. ej. x/0, 0/0)
+export function drawCenterBadge(
+  ctx: CanvasRenderingContext2D, view: View, title: string, subtitle: string,
+): void {
+  const cx = view.width / 2;
+  const cy = view.height / 2;
+  ctx.save();
+  ctx.font = '700 16px Inter, system-ui, sans-serif';
+  const w1 = ctx.measureText(title).width;
+  ctx.font = '500 13px Inter, system-ui, sans-serif';
+  const w2 = ctx.measureText(subtitle).width;
+  const boxW = Math.min(view.width - 32, Math.max(w1, w2) + 40);
+  const boxH = 68;
+
+  ctx.fillStyle = 'rgba(17,17,17,0.78)';
+  ctx.strokeStyle = '#ff6b6b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 16px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#ff9e9e';
+  ctx.fillText(title, cx, cy - 11, boxW - 24);
+
+  ctx.font = '500 13px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(subtitle, cx, cy + 13, boxW - 24);
+  ctx.restore();
+}

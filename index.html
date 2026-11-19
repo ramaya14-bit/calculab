@@ -30,12 +30,15 @@
       <section class="panel">
         <h2 id="mode-indicator">Modo 0 · Explorar</h2>
 
-        <!-- Función a explorar: el usuario escribe cualquier f(x) -->
+        <!-- Función o ecuación a explorar: el usuario escribe o dibuja a mano -->
         <form id="fn-form" class="fn-form" autocomplete="off">
           <label for="fn-input">f(x) =</label>
-          <input id="fn-input" type="text" spellcheck="false" placeholder="por ejemplo x^3 - 3x" />
+          <input id="fn-input" type="text" spellcheck="false" placeholder="ej. x^3 - 3x, x^2 - 4 = 0, (x^2-4)/(x-2)" />
+          <button id="btn-eq-zero" type="button" class="btn-outline" title="Igualar la expresión a 0">= 0</button>
+          <button id="btn-draw" type="button" class="btn-outline" title="Escribir la función o ecuación a mano">✍ A mano</button>
           <button type="submit" class="btn">Graficar</button>
         </form>
+        <p id="fn-notice" class="notice" hidden></p>
         <p id="fn-error" class="warning" hidden></p>
         <div id="fn-examples" class="fn-examples"></div>
 
@@ -62,7 +65,7 @@
             <li>Pulsa <b>Ver Cámara</b> y acepta el permiso. Muestra la palma de las manos a la cámara.</li>
             <li><b>Mano derecha</b> <span class="hand-dot" style="background:#ff4fd8"></span>(rosa): muestra de 1 a 5 dedos para elegir la interacción. La punta del índice mueve el punto <i>x = a</i>.</li>
             <li><b>Mano izquierda</b> <span class="hand-dot" style="background:#2ee6c8"></span>(turquesa): ✊ puño y mueve para desplazar · ☝ índice y abre/cierra la pinza con el pulgar para hacer zoom · ✋ abierta para soltar.</li>
-            <li><b>Función</b>: escribe cualquier función de x y pulsa Graficar. Usa <code>^</code> para potencias, <code>sqrt()</code>, <code>sin()</code>, <code>cos()</code>, <code>tan()</code>, <code>ln()</code>, <code>e^x</code>, <code>abs()</code>. Ejemplo: <code>x^2*sin(x)</code>.</li>
+            <li><b>Función, ecuación e indeterminaciones</b>: escribe cualquier función de x o ecuación igualada a 0 (ej. <code>x^2 - 4 = 0</code>), usa el botón <b>= 0</b> o dibújala con <b>✍ A mano</b>. Usa <code>^</code> para potencias, <code>sqrt()</code>, <code>sin()</code>, <code>cos()</code>, <code>tan()</code>, <code>ln()</code>, <code>e^x</code>, <code>abs()</code>, <code>lim x-&gt;2 ...</code>. Las indeterminaciones (<code>x/0</code>, <code>0/0</code>, <code>0^0</code>, huecos y asíntotas) se detectan automáticamente.</li>
             <li><b>Sin cámara</b>: botones o teclas 1–5 para el modo, clic o flechas ← → para mover <i>a</i>, arrastrar para desplazar, rueda para zoom, <b>R</b> para reiniciar, <b>N</b> para un nuevo reto.</li>
           </ol>
           <table>
@@ -78,6 +81,58 @@
         <p class="muted quote">A hombros de gigantes. — Isaac Newton</p>
       </section>
     </main>
+
+    <!-- Modal de escritura a mano (respeta la estética de CalcuLab) -->
+    <div id="draw-modal" class="modal-overlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="draw-modal-title">
+        <div class="modal-head">
+          <h3 id="draw-modal-title">Escribir función o ecuación a mano</h3>
+          <button id="draw-close" type="button" class="modal-close" aria-label="Cerrar">✕</button>
+        </div>
+        <p class="muted">
+          Dibuja tu expresión (ej. <code>x² − 4 = 0</code>, <code>1/0</code>, <code>(x²−4)/(x−2)</code>, <code>sin(x)</code>).
+          Todo se reconoce localmente en tu navegador.
+        </p>
+
+        <canvas id="draw-canvas"></canvas>
+
+        <div class="draw-bar">
+          <button id="draw-undo" type="button" class="btn-outline">↶ Deshacer</button>
+          <button id="draw-clear" type="button" class="btn-outline">Borrar</button>
+          <button id="draw-recognize" type="button" class="btn-outline">Reconocer</button>
+          <button id="draw-apply-now" type="button" class="btn">Reconocer y graficar</button>
+        </div>
+
+        <div class="draw-result">
+          <label for="draw-recognized">Expresión reconocida (editable)</label>
+          <div class="draw-result-row">
+            <input id="draw-recognized" type="text" spellcheck="false" placeholder="Aquí aparecerá tu expresión reconocida…" />
+            <button id="draw-use" type="button" class="btn">Graficar</button>
+          </div>
+          <p id="draw-preview" class="draw-preview" hidden></p>
+          <p id="draw-error" class="warning" hidden></p>
+        </div>
+
+        <details id="teach-box" class="help">
+          <summary>Enseñar mi letra / opciones avanzadas</summary>
+          <p class="muted">
+            Si algún símbolo no se reconoce con tu letra, elige el símbolo, dibújalo solo en el recuadro y pulsa <b>Enseñar</b> (1 o 2 veces basta).
+          </p>
+          <div class="draw-bar">
+            <select id="teach-symbol" aria-label="Símbolo a enseñar"></select>
+            <button id="teach-save" type="button" class="btn-outline">Enseñar</button>
+            <button id="teach-reset" type="button" class="btn-outline">Olvidar</button>
+          </div>
+          <div class="gemini-opt">
+            <label for="gemini-key">Clave propia de Gemini API (opcional, guardada solo en este navegador)</label>
+            <div class="draw-result-row">
+              <input id="gemini-key" type="password" autocomplete="off" placeholder="Opcional: AIza…" />
+              <button id="gemini-save" type="button" class="btn-outline">Guardar clave</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
